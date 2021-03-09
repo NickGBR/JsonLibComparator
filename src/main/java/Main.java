@@ -239,9 +239,6 @@ public class Main {
                 }
             }
         }
-        for (Map.Entry<String, String> stringStringEntry : map.entrySet()) {
-            System.out.println(stringStringEntry.getKey() + " " + stringStringEntry.getValue());
-        }
     }
 
     private static Properties loadProps() throws IOException {
