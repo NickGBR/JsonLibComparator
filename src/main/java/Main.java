@@ -1,5 +1,5 @@
-
-import com.sun.xml.internal.ws.util.StringUtils;
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.json.JSONObject;
@@ -19,11 +19,13 @@ public class Main {
     public static void main(String[] args) throws IOException, ParseException {
         final Properties properties = loadProps();
 
-        FileReader sberReader = new FileReader(properties.getProperty("external_file_path"));
-        FileReader ourReader = new FileReader(properties.getProperty("core_file_path"));
+        File externalFile = new File(properties.getProperty("external_file_path"));
+        File ourFile = new File(properties.getProperty("core_file_path"));
 
-        fillMap(sberReader, externalMap);
-        fillMap(ourReader, coreMap);
+        FileReader sberReader = new FileReader(externalFile);
+        FileReader ourReader = new FileReader(ourFile);
+        fillMap(externalFile, externalMap);
+        fillMap(ourFile, coreMap);
 
         compareMaps(coreMap, externalMap, properties.getProperty("check_type"));
     }
@@ -49,7 +51,7 @@ public class Main {
                 errorsList.add(pair.getKey() + " " + pair.getValue());
             } else {
                 if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
-                    resultMap.put(pair.getKey(), coreMap.get(pair.getKey()));
+                    resultMap.put(pair.getKey(), pair.getValue() + ">" + coreMap.get(pair.getKey()));
                 }
             }
         }
@@ -66,7 +68,7 @@ public class Main {
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
-                    resultMap.put(pair.getKey(), coreMap.get(pair.getKey()));
+                    resultMap.put(pair.getKey(), pair.getValue() + ">" + coreMap.get(pair.getKey()));
                 }
             }
         }
@@ -80,7 +82,7 @@ public class Main {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!pair.getKey().startsWith("@babel")) {
                     if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
-                        resultMap.put(pair.getKey(), coreMap.get(pair.getKey()));
+                        resultMap.put(pair.getKey(), pair.getValue() + ">" + coreMap.get(pair.getKey()));
                     }
                 }
             }
@@ -89,6 +91,7 @@ public class Main {
         result.accumulate("differences", resultMap);
         writeToFile(result.toString());
     }
+
 
     private static void writeToFile(String result) throws IOException {
         final Properties properties = loadProps();
@@ -102,7 +105,16 @@ public class Main {
         fileWriter.close();
     }
 
-    private static void fillMap(FileReader reader, Map<String, String> map) throws IOException, ParseException {
+    private static void fillMap(File file, Map<String, String> map) throws IOException, ParseException {
+        if (FilenameUtils.getExtension(file.getName()).equals("json")) {
+            fillMapFromJson(new FileReader(file), map);
+        }
+        if (FilenameUtils.getExtension(file.getName()).equals("lock")) {
+            fillMapFromLock(new FileReader(file), map);
+        }
+    }
+
+    private static void fillMapFromJson(FileReader reader, Map<String, String> map) throws IOException, ParseException {
         JSONParser jsonParser = new JSONParser();
 
         final Object object = jsonParser.parse(reader);
@@ -118,6 +130,25 @@ public class Main {
             JSONObject jsonObject = new JSONObject(o.toString());
             String version = jsonObject.get("version").toString();
             map.put(key, version);
+        }
+    }
+
+    private static void fillMapFromLock(FileReader reader, Map<String, String> map) throws IOException {
+        BufferedReader bufferedReader = new BufferedReader(reader);
+
+        while(bufferedReader.ready()){
+            String dependency = bufferedReader.readLine();
+            if (StringUtils.contains(dependency,'@')) {
+                String version = bufferedReader.readLine().trim();
+                if(StringUtils.startsWith(version, "version")){
+                    final String[] depSplit = dependency.split("@");
+                    final String[] verSplit = version.split(" ");
+
+                    final String clearVersion = StringUtils.remove(verSplit[1], "\"");
+
+                    map.put(depSplit[0], clearVersion);
+                }
+            }
         }
     }
 
