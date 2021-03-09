@@ -1,14 +1,17 @@
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.json.JSONArray;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.json.JSONObject;
 
 import java.io.*;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Main {
 
@@ -16,7 +19,7 @@ public class Main {
     private static final Map<String, String> coreMap = new HashMap<>();
     private static final Map<String, String> resultMap = new TreeMap<>();
 
-    public static void main(String[] args) throws IOException, ParseException {
+    public static void main(String[] args) throws IOException, ParseException, NoSuchFieldException, IllegalAccessException {
         final Properties properties = loadProps();
 
         File externalFile = new File(properties.getProperty("external_file_path"));
@@ -30,7 +33,7 @@ public class Main {
         compareMaps(coreMap, externalMap, properties.getProperty("check_type"));
     }
 
-    private static void compareMaps(Map<String, String> coreMap, Map<String, String> externalMap, String checkType) throws IOException {
+    private static void compareMaps(Map<String, String> coreMap, Map<String, String> externalMap, String checkType) throws IOException, NoSuchFieldException, IllegalAccessException {
         switch (checkType) {
             case "0":
                 compare(coreMap, externalMap);
@@ -41,17 +44,26 @@ public class Main {
             case "2":
                 compareWithoutBubbleAndErrors(coreMap, externalMap);
                 break;
+            case "3":
+                newFormatCompare(coreMap, externalMap);
+                break;
+            case "4":
+                newFormatCompareWithoutErrors(coreMap, externalMap);
+                break;
+            case "5":
+                newFormatCompareWithoutBubbleAndErrors(coreMap, externalMap);
+                break;
         }
     }
 
-    private static void compare(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+    private static void compare(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException, NoSuchFieldException, IllegalAccessException {
         List<String> errorsList = new ArrayList<>();
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) == null) {
                 errorsList.add(pair.getKey() + " " + pair.getValue());
             } else {
                 if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
-                    resultMap.put(pair.getKey(), pair.getValue() + ">" + coreMap.get(pair.getKey()));
+                    resultMap.put(pair.getKey(), coreMap.get(pair.getKey()));
                 }
             }
         }
@@ -59,7 +71,7 @@ public class Main {
         Collections.sort(errorsList);
 
         JSONObject result = new JSONObject();
-        result.accumulate("differences", resultMap);
+        result.put("differences", resultMap);
         result.accumulate("core_file_doesnt_contains", errorsList);
         writeToFile(result.toString());
     }
@@ -68,7 +80,7 @@ public class Main {
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
-                    resultMap.put(pair.getKey(), pair.getValue() + ">" + coreMap.get(pair.getKey()));
+                    resultMap.put(pair.getKey(), coreMap.get(pair.getKey()));
                 }
             }
         }
@@ -82,7 +94,7 @@ public class Main {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!pair.getKey().startsWith("@babel")) {
                     if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
-                        resultMap.put(pair.getKey(), pair.getValue() + ">" + coreMap.get(pair.getKey()));
+                        resultMap.put(pair.getKey(), coreMap.get(pair.getKey()));
                     }
                 }
             }
@@ -92,6 +104,53 @@ public class Main {
         writeToFile(result.toString());
     }
 
+    private static void newFormatCompare(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException, NoSuchFieldException, IllegalAccessException {
+        List<String> errorsList = new ArrayList<>();
+        for (Map.Entry<String, String> pair : externalMap.entrySet()) {
+            if (coreMap.get(pair.getKey()) == null) {
+                errorsList.add(pair.getKey() + " " + pair.getValue());
+            } else {
+                if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
+                    resultMap.put(pair.getKey(), pair.getValue() + " > " + coreMap.get(pair.getKey()));
+                }
+            }
+        }
+
+        Collections.sort(errorsList);
+
+        JSONObject result = new JSONObject();
+        result.put("differences", resultMap);
+        result.accumulate("core_file_doesnt_contains", errorsList);
+        writeToFile(result.toString());
+    }
+
+    private static void newFormatCompareWithoutErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+        for (Map.Entry<String, String> pair : externalMap.entrySet()) {
+            if (coreMap.get(pair.getKey()) != null) {
+                if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
+                    resultMap.put(pair.getKey(), pair.getValue() + " > " + coreMap.get(pair.getKey()));
+                }
+            }
+        }
+        JSONObject result = new JSONObject();
+        result.accumulate("differences", resultMap);
+        writeToFile(result.toString());
+    }
+
+    private static void newFormatCompareWithoutBubbleAndErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+        for (Map.Entry<String, String> pair : externalMap.entrySet()) {
+            if (coreMap.get(pair.getKey()) != null) {
+                if (!pair.getKey().startsWith("@babel")) {
+                    if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
+                        resultMap.put(pair.getKey(), pair.getValue() + " > " + coreMap.get(pair.getKey()));
+                    }
+                }
+            }
+        }
+        JSONObject result = new JSONObject();
+        result.accumulate("differences", resultMap);
+        writeToFile(result.toString());
+    }
 
     private static void writeToFile(String result) throws IOException {
         final Properties properties = loadProps();
@@ -136,11 +195,11 @@ public class Main {
     private static void fillMapFromLock(FileReader reader, Map<String, String> map) throws IOException {
         BufferedReader bufferedReader = new BufferedReader(reader);
 
-        while(bufferedReader.ready()){
+        while (bufferedReader.ready()) {
             String dependency = bufferedReader.readLine();
-            if (StringUtils.contains(dependency,'@')) {
+            if (StringUtils.contains(dependency, '@')) {
                 String version = bufferedReader.readLine().trim();
-                if(StringUtils.startsWith(version, "version")){
+                if (StringUtils.startsWith(version, "version")) {
                     final String[] depSplit = dependency.split("@");
                     final String[] verSplit = version.split(" ");
 
@@ -157,5 +216,15 @@ public class Main {
         Properties properties = new Properties();
         properties.load(inputStream);
         return properties;
+    }
+
+    private static void makeJsonObjectOrdered(JSONObject object) throws NoSuchFieldException, IllegalAccessException {
+//        for (Field declaredField : object.getClass().getDeclaredFields()) {
+//            if(declaredField.getType() == Map.class){
+//                declaredField.setAccessible(true);
+//                declaredField.set(object, new TreeMap<>());
+//                declaredField.setAccessible(false);
+//            }
+//        }
     }
 }

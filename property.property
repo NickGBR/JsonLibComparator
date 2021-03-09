@@ -1,6 +1,6 @@
 #Thu Mar 04 17:11:44 MSK 2021
 external_file_path=package-lock sber.json
 core_file_path=yarn.lock
-check_type=2
+check_type=5
 output_file_name=tests.json
 
