@@ -11,7 +11,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Main {
 
@@ -25,8 +24,6 @@ public class Main {
         File externalFile = new File(properties.getProperty("external_file_path"));
         File ourFile = new File(properties.getProperty("core_file_path"));
 
-        FileReader sberReader = new FileReader(externalFile);
-        FileReader ourReader = new FileReader(ourFile);
         fillMap(externalFile, externalMap);
         fillMap(ourFile, coreMap);
 
@@ -69,14 +66,16 @@ public class Main {
         }
 
         Collections.sort(errorsList);
+        JSONObject differences = getOrderedJsonObject();
+        resultMap.forEach(differences::put);
 
         JSONObject result = new JSONObject();
-        result.put("differences", resultMap);
+        result.put("differences", differences);
         result.accumulate("core_file_doesnt_contains", errorsList);
         writeToFile(result.toString());
     }
 
-    private static void compareWithoutErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+    private static void compareWithoutErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException, NoSuchFieldException, IllegalAccessException {
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
@@ -84,12 +83,16 @@ public class Main {
                 }
             }
         }
+
+        JSONObject differences = getOrderedJsonObject();
+        resultMap.forEach(differences::put);
+
         JSONObject result = new JSONObject();
-        result.accumulate("differences", resultMap);
+        result.accumulate("differences", differences);
         writeToFile(result.toString());
     }
 
-    private static void compareWithoutBubbleAndErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+    private static void compareWithoutBubbleAndErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException, NoSuchFieldException, IllegalAccessException {
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!pair.getKey().startsWith("@babel")) {
@@ -99,8 +102,12 @@ public class Main {
                 }
             }
         }
+
+        JSONObject differences = getOrderedJsonObject();
+        resultMap.forEach(differences::put);
+
         JSONObject result = new JSONObject();
-        result.accumulate("differences", resultMap);
+        result.accumulate("differences", differences);
         writeToFile(result.toString());
     }
 
@@ -117,14 +124,16 @@ public class Main {
         }
 
         Collections.sort(errorsList);
+        JSONObject differences = getOrderedJsonObject();
+        resultMap.forEach(differences::put);
 
         JSONObject result = new JSONObject();
-        result.put("differences", resultMap);
+        result.put("differences", differences);
         result.accumulate("core_file_doesnt_contains", errorsList);
         writeToFile(result.toString());
     }
 
-    private static void newFormatCompareWithoutErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+    private static void newFormatCompareWithoutErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException, NoSuchFieldException, IllegalAccessException {
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!coreMap.get(pair.getKey()).equals(pair.getValue())) {
@@ -132,12 +141,16 @@ public class Main {
                 }
             }
         }
+
+        JSONObject differences = getOrderedJsonObject();
+        resultMap.forEach(differences::put);
+
         JSONObject result = new JSONObject();
-        result.accumulate("differences", resultMap);
+        result.accumulate("differences", differences);
         writeToFile(result.toString());
     }
 
-    private static void newFormatCompareWithoutBubbleAndErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException {
+    private static void newFormatCompareWithoutBubbleAndErrors(Map<String, String> coreMap, Map<String, String> externalMap) throws IOException, NoSuchFieldException, IllegalAccessException {
         for (Map.Entry<String, String> pair : externalMap.entrySet()) {
             if (coreMap.get(pair.getKey()) != null) {
                 if (!pair.getKey().startsWith("@babel")) {
@@ -147,8 +160,12 @@ public class Main {
                 }
             }
         }
+
+        JSONObject differences = getOrderedJsonObject();
+        resultMap.forEach(differences::put);
+
         JSONObject result = new JSONObject();
-        result.accumulate("differences", resultMap);
+        result.accumulate("differences", differences);
         writeToFile(result.toString());
     }
 
@@ -196,18 +213,34 @@ public class Main {
         BufferedReader bufferedReader = new BufferedReader(reader);
 
         while (bufferedReader.ready()) {
+            //Считываем файл построчно
             String dependency = bufferedReader.readLine();
+
+            //Все зависимости имеют симфол @, нахаодим такие строки.
             if (StringUtils.contains(dependency, '@')) {
                 String version = bufferedReader.readLine().trim();
+
+                //Если зависимомть не сожержит поле "version" это внутрення зависимость, она нам не нужна.
+                // Проверяем наличие поля "version" следующей строкой
                 if (StringUtils.startsWith(version, "version")) {
-                    final String[] depSplit = dependency.split("@");
+                    dependency = StringUtils.remove(dependency, "\"");
                     final String[] verSplit = version.split(" ");
-
                     final String clearVersion = StringUtils.remove(verSplit[1], "\"");
+                    final String[] depSplit = dependency.split("@");
 
-                    map.put(depSplit[0], clearVersion);
+                    // Отдельная проверка для @babel зависимостей.
+                    if(dependency.trim().startsWith("@")) {
+                        dependency = "@" + depSplit[1];
+                    }
+                    else {
+                        dependency = depSplit[0];
+                    }
+                    map.put(dependency, clearVersion);
                 }
             }
+        }
+        for (Map.Entry<String, String> stringStringEntry : map.entrySet()) {
+            System.out.println(stringStringEntry.getKey() + " " + stringStringEntry.getValue());
         }
     }
 
@@ -218,13 +251,15 @@ public class Main {
         return properties;
     }
 
-    private static void makeJsonObjectOrdered(JSONObject object) throws NoSuchFieldException, IllegalAccessException {
-//        for (Field declaredField : object.getClass().getDeclaredFields()) {
-//            if(declaredField.getType() == Map.class){
-//                declaredField.setAccessible(true);
-//                declaredField.set(object, new TreeMap<>());
-//                declaredField.setAccessible(false);
-//            }
-//        }
+    private static JSONObject getOrderedJsonObject() throws NoSuchFieldException, IllegalAccessException {
+        JSONObject object = new JSONObject();
+        for (Field declaredField : object.getClass().getDeclaredFields()) {
+            if(declaredField.getType() == Map.class){
+                declaredField.setAccessible(true);
+                declaredField.set(object, new TreeMap<>());
+                declaredField.setAccessible(false);
+            }
+        }
+        return object;
     }
 }
